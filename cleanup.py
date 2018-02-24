@@ -152,11 +152,10 @@ def write_cache(fileinfos):
     fd.close()
 
 
-def sort_files(cache):
-    # Prepends 0 to the filename if we've seen the file before  this
-    # ensures we never touch files that have already dealt with
-    def _sort_files(name):
-        return str(int(name not in cache)) + name
+def sort_files(fileinfos):
+    # Look up the file in the fileinfos list and use image pixel area as the 'sort' key
+    def _sort_files(filepath):
+        return [f.height * f.width for f in fileinfos if f.filepath == filepath][0]
 
     return _sort_files
 
@@ -253,9 +252,8 @@ if __name__ == '__main__':
 
     # Rename similar files to to be <name>.jpg, <name>_v1.jpg, <name>_v2.jpg etc
     for similar in amalgams.values():
-        similar.sort(key=sort_files(cache))
-
-        # Alphabetically first file retains its filename
+        # sort to prefer the largest (pixel area) image first
+        similar.sort(key = sort_files(fileinfos), reverse = True)
         original_filename_without_extension = os.path.splitext(similar[0])[0]
 
         if move_suspected_duplicates:
