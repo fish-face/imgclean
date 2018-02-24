@@ -45,7 +45,7 @@ def too_small(filename):
 
 def load_image(filename):
     """Load an image and resize it with OpenCV"""
-    img = cv2.imread(filename, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+    img = cv2.imread(filename, 0) # 0 = greyscale
     if img is None:
         return None
 
