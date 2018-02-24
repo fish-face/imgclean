@@ -149,6 +149,18 @@ def sort_files(cache):
     return _sort_files
 
 
+def create_folder(name):
+    if not os.path.exists(name):
+        try:
+            os.mkdir(name)
+            print "Creating '%s' folder" % name
+        except OSError:
+            print "Could not create '%s' folder" % name
+            sys.exit(1)
+    elif not os.path.isdir(name):
+        print "A file named '%s' exists and it is not a directory." % name
+        sys.exit(1)
+
 if __name__ == '__main__':
     locals().update(vars(get_args()))
 
@@ -157,34 +169,17 @@ if __name__ == '__main__':
     except OSError:
         print 'Invalid path: %s' % (folder)
         sys.exit(1)
-
+    # File operations are now relative to source directory
+    
     if remove_small:
-        if not os.path.exists(JUNK):
-            try:
-                os.mkdir(JUNK)
-                print "Creating 'Junk' folder for too-small images."
-            except OSError:
-                print "Could not create 'Junk' folder for too-small images."
-                sys.exit(1)
-        elif not os.path.isdir(JUNK):
-            print "A file named 'Junk' exists and it is not a directory."
-            sys.exit(1)
+        create_folder(JUNK)
 
     duplicate_folder_relative_path = ''
     if move_suspected_duplicates:
         directory_name = os.path.basename(folder)
         duplicate_folder_relative_path = os.path.join('../', '[Dupes] ' + directory_name)
-        if not os.path.exists(duplicate_folder_relative_path):
-            try:
-                os.mkdir(duplicate_folder_relative_path)
-                print "Creating '%s' folder for suspected duplicate images." % duplicate_folder_relative_path
-            except OSError:
-                print "Could not create '%s' folder for suspected duplicate images." % duplicate_folder_relative_path
-                sys.exit(1)
-        elif not os.path.isdir(duplicate_folder_relative_path):
-            print "A file named '%s' exists and it is not a directory." % duplicate_folder_relative_path
-            sys.exit(1)
-
+        create_folder(duplicate_folder_relative_path)
+        
     try:
         cache = read_cache()
     except ValueError:
