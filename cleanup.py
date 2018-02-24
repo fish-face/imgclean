@@ -19,6 +19,14 @@ SIMILARITY_THRESH = 8
 SUPPORTED_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
 
 
+class FileInfo:
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self.phash = None
+        self.width = None
+        self.height = None
+
+
 def get_args():
     parser = argparse.ArgumentParser(description='Clean up image files', add_help=False, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--help', action="help")
@@ -45,16 +53,19 @@ def too_small(filename):
         return True
 
 
-def load_image(filename):
+def load_image(fileinfo):
     """Load an image and resize it with OpenCV"""
-    img = cv2.imread(filename, 0) # 0 = greyscale
+    img = cv2.imread(fileinfo.filepath, 0) # 0 = greyscale
     if img is None:
         return None
+
+    # store original height & width; to be used later to determine "best" copy of image
+    fileinfo.height, fileinfo.width = img.shape
 
     try:
         img = cv2.resize(img, SIZE)
     except cv2.error, e:
-        print 'Error loading', filename
+        print 'Error loading', fileinfo.filepath
         raise e
     return img
 
@@ -64,16 +75,16 @@ def compute_dct(img):
     return np.uint8(cv2.dct(np.float32(img)/255.0)*255)
 
 
-def compute_phash(filename):
+def compute_phash(fileinfo):
     """Compute a perceptual hash of an image"""
-    img = load_image(filename)
+    img = load_image(fileinfo)
     if img is None:
         return None
     dct = compute_dct(img)
     dct = dct[:HASH_DIM[0], :HASH_DIM[1]]
     avg = np.average(dct)
     bits = [(x > avg) for x in dct.flatten()]
-    return sum([2**i * int(bits[i]) for i in range(len(bits))])
+    fileinfo.phash = sum([2**i * int(bits[i]) for i in range(len(bits))])
 
 
 def hamming(h1, h2):
@@ -119,7 +130,7 @@ def read_cache():
     for line in fd.readlines():
         line = line.split()
         try:
-            cache[line[0]] = {'mtime': int(line[1]), 'phash': int(line[2])}
+            cache[line[0]] = {'mtime': int(line[1]), 'phash': int(line[2]), 'width': int(line[3]), 'height': int(line[4])}
         except:
             pass
 
@@ -128,15 +139,15 @@ def read_cache():
     return cache
 
 
-def write_cache(files, hashes):
+def write_cache(fileinfos):
     try:
         fd = open(CACHE_FILE, 'w')
     except:
         raise ValueError('Could not open cache file for writing')
 
-    for file, hash in zip(files, hashes):
-        mtime = int(os.path.getmtime(file))
-        fd.write('%s %s %s\n' % (file, mtime, hash))
+    for fileinfo in fileinfos:
+        mtime = int(os.path.getmtime(fileinfo.filepath))
+        fd.write('%s %s %s %s %s\n' % (fileinfo.filepath, mtime, fileinfo.phash, fileinfo.width, fileinfo.height))
 
     fd.close()
 
@@ -190,12 +201,11 @@ if __name__ == '__main__':
         cache = {}
 
     # Recursively compute phash for all supported images, or extract the cached one.
-    hashes = []
-    files = []
-
+    fileinfos = []
     for root, dir_list, file_list in os.walk('.'):
         for file in [f for f in file_list if os.path.splitext(f)[1].lower() in SUPPORTED_FILE_EXTENSIONS]:
             file = os.path.join(root, file)
+            fileinfo = FileInfo(file)
 
             # Move the file away if it's too small
             if remove_small and too_small(file):
@@ -209,35 +219,33 @@ if __name__ == '__main__':
             try:
                 # Get cached info
                 if cache[file]['mtime'] == int(os.path.getmtime(file)):
-                    phash = cache[file]['phash']
+                    fileinfo.phash = cache[file]['phash']
                 else:
                     # update hash if file has been modified since cached result
-                    phash = compute_phash(file)
-                    if phash:
-                        print '%s %x' % (file, phash)
+                    compute_phash(fileinfo)
+                    if fileinfo.phash:
+                        print '%s %x' % (file, fileinfo.phash)
             except KeyError:
                 # Compute hashes of uncached files and print to show we're doing stuff
-                phash = compute_phash(file)
-                if phash:
-                    print '%s %x' % (file, phash)
+                compute_phash(fileinfo)
+                if fileinfo.phash:
+                    print '%s %x' % (file, fileinfo.phash)
 
-            files.append(file)
-            hashes.append(phash)
+            fileinfos.append(fileinfo)
 
-    print 'Finished gathering hashes for %s files in %s' % (len(files), folder)
+    print 'Finished gathering hashes for %s files in %s' % (len(fileinfos), folder)
 
     # Find pairs of images whose phash is similar
     amalgams = defaultdict(list)
-    for i, file_a in enumerate(files):
-        if hashes[i] is None:
+    for i, file_a in enumerate(fileinfos):
+        if file_a.phash is None:
             continue
-        for j, file_b in enumerate(files[i+1:]):
-            j += i+1
-            if hashes[j] is None:
+        for file_b in fileinfos[i+1:]:
+            if file_b.phash is None:
                 continue
-            if hamming(hashes[i], hashes[j]) < SIMILARITY_THRESH:
-                amalgams[file_a].append(file_b)
-                amalgams[file_b].append(file_a)
+            if hamming(file_a.phash, file_b.phash) < SIMILARITY_THRESH:
+                amalgams[file_a.filepath].append(file_b.filepath)
+                amalgams[file_b.filepath].append(file_a.filepath)
 
     # Group together all images which are similar
     amalgams = dict(amalgams)
@@ -256,9 +264,8 @@ if __name__ == '__main__':
             duplicate_file_directory = os.path.dirname(duplicate_file_path)
             create_folder(duplicate_file_directory)
             os.rename(similar[0], duplicate_file_path)
-            index_to_remove = files.index(similar[0])
-            del files[index_to_remove]
-            del hashes[index_to_remove]
+            index_to_remove = [i for i, f in enumerate(fileinfos) if f.filepath == similar[0]][0]
+            del fileinfos[index_to_remove]
 
         for i, oldname in enumerate(similar[1:], 1):
             ext = os.path.splitext(oldname)[1]
@@ -274,19 +281,18 @@ if __name__ == '__main__':
                     continue
                 try:
                     os.rename(oldname, newname)
+                    fileinfo_index_to_update = [i for i, f in enumerate(fileinfos) if f.filepath == oldname][0]
                     if move_suspected_duplicates:
                         print 'Moving suspected duplicate %s to %s.' % (oldname, duplicate_folder_relative_path)
-                        index_to_remove = files.index(oldname)
-                        del files[index_to_remove]
-                        del hashes[index_to_remove]
+                        del fileinfos[fileinfo_index_to_update]
                     else:
                         print 'Renaming %s to %s due to similarities.' % (oldname, newname)
-                        files[files.index(oldname)] = newname
+                        files[fileinfo_index_to_update].filepath = newname
                 except OSError, e:
                     print 'Failed to rename %s: %s' % (oldname, e)
                     continue
 
-    write_cache(files, hashes)
+    write_cache(fileinfos)
 
     print 'Done.'
 
