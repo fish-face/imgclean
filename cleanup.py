@@ -15,6 +15,7 @@ HASH_DIM = (8, 8)
 HASH_SIZE = HASH_DIM[0] * HASH_DIM[1]
 CACHE_FILE = 'fingerprint.db'
 JUNK = 'Junk'
+SUSPECTED_DUPLICATES = 'Dupes'
 SIMILARITY_THRESH = 8
 
 
@@ -23,6 +24,7 @@ def get_args():
     parser.add_argument('--help', action="help")
     #parser.add_argument('-r', '--rename-similar', action='store_true', help="Group together similar-looking images for easy removal")
     parser.add_argument('-s', '--remove-small', action='store_true', help="Move images smaller than a certain threshold to a separate directory")
+    parser.add_argument('-d', '--move-suspected-duplicates', action='store_true', help="Move all suspected duplicates (including original) into a separate directory")
     parser.add_argument('-w', '--min-width', default=MIN_W, help="Minimum width")
     parser.add_argument('-h', '--min-height', default=MIN_H, help="Minimum height")
     parser.add_argument('-t', '--threshold', default=SIMILARITY_THRESH, help="Threshold below which images are too similar")
@@ -169,6 +171,18 @@ if __name__ == '__main__':
             print "A file named 'Junk' exists and it is not a directory."
             sys.exit(1)
 
+    if move_suspected_duplicates:
+        if not os.path.exists(SUSPECTED_DUPLICATES):
+            try:
+                os.mkdir(SUSPECTED_DUPLICATES)
+                print "Creating 'SUSPECTED_DUPLICATES' folder for too-small images."
+            except OSError:
+                print "Could not create 'SUSPECTED_DUPLICATES' folder for too-small images."
+                sys.exit(1)
+        elif not os.path.isdir(SUSPECTED_DUPLICATES):
+            print "A file named '%s' exists and it is not a directory." % SUSPECTED_DUPLICATES
+            sys.exit(1)
+
     try:
         cache = read_cache()
     except ValueError:
@@ -224,11 +238,22 @@ if __name__ == '__main__':
     # Rename similar files to to be <name>.jpg, <name>_v1.jpg, <name>_v2.jpg etc
     for similar in amalgams.values():
         similar.sort(key=sort_files(cache))
-        # Alphabetically first file remains the same
-        leader = os.path.splitext(similar[0])[0]
+        # Alphabetically first file retains its filename
+        original_filename_without_extension = os.path.splitext(similar[0])[0]
+
+        if move_suspected_duplicates:
+            os.rename(similar[0], os.path.join(SUSPECTED_DUPLICATES, similar[0]))
+            print 'Moving original file %s to %s directory' % (similar[0], SUSPECTED_DUPLICATES)
+            index_to_remove = files.index(similar[0])
+            del files[index_to_remove]
+            del hashes[index_to_remove]
+
         for i, oldname in enumerate(similar[1:], 1):
             ext = os.path.splitext(oldname)[1]
-            newname = '%s_v%d%s' % (leader, i, ext)
+            newname = '%s_v%d%s' % (original_filename_without_extension, i, ext)
+            if move_suspected_duplicates:
+                newname = os.path.join(SUSPECTED_DUPLICATES, newname)
+
             # Don't try to rename things to themselves
             if oldname != newname:
                 # Don't overwrite existing files
@@ -237,11 +262,17 @@ if __name__ == '__main__':
                     continue
                 try:
                     os.rename(oldname, newname)
-                    print 'Renaming %s to %s due to similarities.' % (oldname, newname)
+                    if move_suspected_duplicates:
+                        print 'Moving suspected duplicate %s to %s.' % (oldname, SUSPECTED_DUPLICATES)
+                        index_to_remove = files.index(oldname)
+                        del files[index_to_remove]
+                        del hashes[index_to_remove]
+                    else:
+                        print 'Renaming %s to %s due to similarities.' % (oldname, newname)
+                        files[files.index(oldname)] = newname
                 except OSError, e:
                     print 'Failed to rename %s: %s' % (oldname, e)
                     continue
-                files[files.index(oldname)] = newname
 
     write_cache(files, hashes)
 
