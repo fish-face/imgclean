@@ -16,6 +16,7 @@ HASH_SIZE = HASH_DIM[0] * HASH_DIM[1]
 CACHE_FILE = 'fingerprint.db'
 JUNK = 'Junk'
 SIMILARITY_THRESH = 8
+SUPPORTED_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
 
 
 def get_args():
@@ -171,6 +172,8 @@ if __name__ == '__main__':
         sys.exit(1)
     # File operations are now relative to source directory
     
+    print "Begin processing root image directory '%s'" % folder
+
     if remove_small:
         create_folder(JUNK)
 
@@ -186,34 +189,42 @@ if __name__ == '__main__':
         print 'Error reading cache file; ignoring'
         cache = {}
 
-    # Compute phash for all images, or extract the cached one.
+    # Recursively compute phash for all supported images, or extract the cached one.
     hashes = []
-    files = sorted(glob('*'))
-    for file in files[:]:
-        # Move the file away if it's too small
-        if remove_small and too_small(file):
-            files.remove(file)
+    files = []
+
+    for root, dir_list, file_list in os.walk('.'):
+        for file in [f for f in file_list if os.path.splitext(f)[1].lower() in SUPPORTED_FILE_EXTENSIONS]:
+            file = os.path.join(root, file)
+
+            # Move the file away if it's too small
+            if remove_small and too_small(file):
+                try:
+                    os.rename(file, os.path.join(JUNK, file))
+                    print 'Moving %s to junk as it is too small.' % (file)
+                except OSError, e:
+                    print 'Failed to move %s: %s' % (file, e)
+                continue
+
             try:
-                os.rename(file, os.path.join(JUNK, file))
-                print 'Moving %s to junk as it is too small.' % (file)
-            except OSError, e:
-                print 'Failed to move %s: %s' % (file, e)
-            continue
-        try:
-            # Get cached info
-            if cache[file]['mtime'] == int(os.path.getmtime(file)):
-                phash = cache[file]['phash']
-            else:
+                # Get cached info
+                if cache[file]['mtime'] == int(os.path.getmtime(file)):
+                    phash = cache[file]['phash']
+                else:
+                    # update hash if file has been modified since cached result
+                    phash = compute_phash(file)
+                    if phash:
+                        print '%s %x' % (file, phash)
+            except KeyError:
+                # Compute hashes of uncached files and print to show we're doing stuff
                 phash = compute_phash(file)
                 if phash:
                     print '%s %x' % (file, phash)
-        except KeyError:
-            # Compute hashes of uncached files and print to show we're doing stuff
-            phash = compute_phash(file)
-            if phash:
-                print '%s %x' % (file, phash)
 
-        hashes.append(phash)
+            files.append(file)
+            hashes.append(phash)
+
+    print 'Finished gathering hashes for %s files in %s' % (len(files), folder)
 
     # Find pairs of images whose phash is similar
     amalgams = defaultdict(list)
@@ -235,12 +246,16 @@ if __name__ == '__main__':
     # Rename similar files to to be <name>.jpg, <name>_v1.jpg, <name>_v2.jpg etc
     for similar in amalgams.values():
         similar.sort(key=sort_files(cache))
+
         # Alphabetically first file retains its filename
         original_filename_without_extension = os.path.splitext(similar[0])[0]
 
         if move_suspected_duplicates:
-            os.rename(similar[0], os.path.join(duplicate_folder_relative_path, similar[0]))
             print 'Moving original file %s to duplicates directory' % similar[0]
+            duplicate_file_path = os.path.join(duplicate_folder_relative_path, similar[0])
+            duplicate_file_directory = os.path.dirname(duplicate_file_path)
+            create_folder(duplicate_file_directory)
+            os.rename(similar[0], duplicate_file_path)
             index_to_remove = files.index(similar[0])
             del files[index_to_remove]
             del hashes[index_to_remove]
