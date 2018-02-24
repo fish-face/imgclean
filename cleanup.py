@@ -15,7 +15,6 @@ HASH_DIM = (8, 8)
 HASH_SIZE = HASH_DIM[0] * HASH_DIM[1]
 CACHE_FILE = 'fingerprint.db'
 JUNK = 'Junk'
-SUSPECTED_DUPLICATES = 'Dupes'
 SIMILARITY_THRESH = 8
 
 
@@ -171,16 +170,19 @@ if __name__ == '__main__':
             print "A file named 'Junk' exists and it is not a directory."
             sys.exit(1)
 
+    duplicate_folder_relative_path = ''
     if move_suspected_duplicates:
-        if not os.path.exists(SUSPECTED_DUPLICATES):
+        directory_name = os.path.basename(folder)
+        duplicate_folder_relative_path = os.path.join('../', '[Dupes] ' + directory_name)
+        if not os.path.exists(duplicate_folder_relative_path):
             try:
-                os.mkdir(SUSPECTED_DUPLICATES)
-                print "Creating 'SUSPECTED_DUPLICATES' folder for too-small images."
+                os.mkdir(duplicate_folder_relative_path)
+                print "Creating '%s' folder for suspected duplicate images." % duplicate_folder_relative_path
             except OSError:
-                print "Could not create 'SUSPECTED_DUPLICATES' folder for too-small images."
+                print "Could not create '%s' folder for suspected duplicate images." % duplicate_folder_relative_path
                 sys.exit(1)
-        elif not os.path.isdir(SUSPECTED_DUPLICATES):
-            print "A file named '%s' exists and it is not a directory." % SUSPECTED_DUPLICATES
+        elif not os.path.isdir(duplicate_folder_relative_path):
+            print "A file named '%s' exists and it is not a directory." % duplicate_folder_relative_path
             sys.exit(1)
 
     try:
@@ -242,8 +244,8 @@ if __name__ == '__main__':
         original_filename_without_extension = os.path.splitext(similar[0])[0]
 
         if move_suspected_duplicates:
-            os.rename(similar[0], os.path.join(SUSPECTED_DUPLICATES, similar[0]))
-            print 'Moving original file %s to %s directory' % (similar[0], SUSPECTED_DUPLICATES)
+            os.rename(similar[0], os.path.join(duplicate_folder_relative_path, similar[0]))
+            print 'Moving original file %s to duplicates directory' % similar[0]
             index_to_remove = files.index(similar[0])
             del files[index_to_remove]
             del hashes[index_to_remove]
@@ -252,7 +254,7 @@ if __name__ == '__main__':
             ext = os.path.splitext(oldname)[1]
             newname = '%s_v%d%s' % (original_filename_without_extension, i, ext)
             if move_suspected_duplicates:
-                newname = os.path.join(SUSPECTED_DUPLICATES, newname)
+                newname = os.path.join(duplicate_folder_relative_path, newname)
 
             # Don't try to rename things to themselves
             if oldname != newname:
@@ -263,7 +265,7 @@ if __name__ == '__main__':
                 try:
                     os.rename(oldname, newname)
                     if move_suspected_duplicates:
-                        print 'Moving suspected duplicate %s to %s.' % (oldname, SUSPECTED_DUPLICATES)
+                        print 'Moving suspected duplicate %s to %s.' % (oldname, duplicate_folder_relative_path)
                         index_to_remove = files.index(oldname)
                         del files[index_to_remove]
                         del hashes[index_to_remove]
