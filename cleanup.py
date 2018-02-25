@@ -220,7 +220,10 @@ if __name__ == '__main__':
             # Move the file away if it's too small
             if remove_small and too_small(file):
                 try:
-                    os.rename(file, os.path.join(JUNK, file))
+                    junk_file_path = os.path.join(JUNK, file)
+                    junk_file_directory = os.path.dirname(junk_file_path)
+                    create_folder(junk_file_directory)
+                    os.rename(file, junk_file_path)
                     print 'Moving %s to junk as it is too small.' % (file)
                 except OSError, e:
                     print 'Failed to move %s: %s' % (file, e)
