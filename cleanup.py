@@ -199,9 +199,20 @@ if __name__ == '__main__':
         print 'Error reading cache file; ignoring'
         cache = {}
 
+    _print_counter = 0
+    def _print_progress(char):
+        global _print_counter
+        _print_counter += 1
+        sys.stdout.write(char)
+        if _print_counter > 80:
+            sys.stdout.write("\r\n")
+            _print_counter = 0
+
     # Recursively compute phash for all supported images, or extract the cached one.
     fileinfos = []
     for root, dir_list, file_list in os.walk('.'):
+        print "\r\nBegin hashing directory '%s':" % root
+        _print_counter = 0
         for file in [f for f in file_list if os.path.splitext(f)[1].lower() in SUPPORTED_FILE_EXTENSIONS]:
             file = os.path.join(root, file)
             fileinfo = FileInfo(file)
@@ -223,14 +234,15 @@ if __name__ == '__main__':
                     # update hash if file has been modified since cached result
                     compute_phash(fileinfo)
                     if fileinfo.phash:
-                        print '%s %x' % (file, fileinfo.phash)
+                        _print_progress('+') # + represents updating known hash
             except KeyError:
-                # Compute hashes of uncached files and print to show we're doing stuff
+                # Compute hashes of uncached files
                 compute_phash(fileinfo)
                 if fileinfo.phash:
-                    print '%s %x' % (file, fileinfo.phash)
+                    _print_progress('.') # . represents calculating new hash
 
             fileinfos.append(fileinfo)
+        print "done"
 
     print 'Finished gathering hashes for %s files in %s' % (len(fileinfos), folder)
 
