@@ -128,7 +128,7 @@ def read_cache():
 
     cache = {}
     for line in fd.readlines():
-        line = line.split()
+        line = line.split('\t')
         try:
             cache[line[0]] = {'mtime': int(line[1]), 'phash': int(line[2]), 'width': int(line[3]), 'height': int(line[4])}
         except:
@@ -147,7 +147,7 @@ def write_cache(fileinfos):
 
     for fileinfo in fileinfos:
         mtime = int(os.path.getmtime(fileinfo.filepath))
-        fd.write('%s %s %s %s %s\n' % (fileinfo.filepath, mtime, fileinfo.phash, fileinfo.width, fileinfo.height))
+        fd.write('%s\t%s\t%s\t%s\t%s\n' % (fileinfo.filepath, mtime, fileinfo.phash, fileinfo.width, fileinfo.height))
 
     fd.close()
 
