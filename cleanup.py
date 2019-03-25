@@ -232,7 +232,8 @@ if __name__ == '__main__':
             try:
                 # Get cached info
                 if cache[file]['mtime'] == int(os.path.getmtime(file)):
-                    fileinfo.phash = cache[file]['phash']
+                    for var in ('phash', 'width', 'height'):
+                        setattr(fileinfo, var, cache[file][var])
                 else:
                     # update hash if file has been modified since cached result
                     compute_phash(fileinfo)
