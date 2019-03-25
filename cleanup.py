@@ -163,7 +163,7 @@ def sort_files(fileinfos):
 def create_folder(name):
     if not os.path.exists(name):
         try:
-            os.mkdir(name)
+            os.makedirs(name)
             print "Creating '%s' folder" % name
         except OSError:
             print "Could not create '%s' folder" % name
