@@ -14,7 +14,7 @@ SIZE = (64, 36)  # 16:9
 HASH_DIM = (8, 8)
 HASH_SIZE = HASH_DIM[0] * HASH_DIM[1]
 CACHE_FILE = 'fingerprint.db'
-JUNK = 'Junk'
+JUNK_FOLDER_PREFIX = '[Junk]'
 DUPE_FOLDER_PREFIX = '[Dupes]'
 SIMILARITY_THRESH = 8
 SUPPORTED_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
@@ -185,12 +185,15 @@ if __name__ == '__main__':
     
     print "Begin processing root image directory '%s'" % folder
 
+    directory_name = os.path.basename(folder)
+
+    junk_folder_relative_path = ''
     if remove_small:
-        create_folder(JUNK)
+        junk_folder_relative_path = os.path.join('..', JUNK_FOLDER_PREFIX + directory_name)
+        create_folder(junk_folder_relative_path)
 
     duplicate_folder_relative_path = ''
     if move_suspected_duplicates:
-        directory_name = os.path.basename(folder)
         duplicate_folder_relative_path = os.path.join('..', DUPE_FOLDER_PREFIX + directory_name)
         create_folder(duplicate_folder_relative_path)
         
@@ -221,7 +224,7 @@ if __name__ == '__main__':
             # Move the file away if it's too small
             if remove_small and too_small(file):
                 try:
-                    junk_file_path = os.path.join(JUNK, file)
+                    junk_file_path = os.path.join(junk_folder_relative_path, file)
                     junk_file_directory = os.path.dirname(junk_file_path)
                     create_folder(junk_file_directory)
                     os.rename(file, junk_file_path)
