@@ -152,12 +152,12 @@ def write_cache(fileinfos):
     fd.close()
 
 
-def sort_files(fileinfos):
+def sort_files_key(fileinfos):
     # Look up the file in the fileinfos list and use image pixel area as the 'sort' key
-    def _sort_files(filepath):
+    def _get_image_area_from_cache(filepath):
         return [f.height * f.width for f in fileinfos if f.filepath == filepath][0]
 
-    return _sort_files
+    return _get_image_area_from_cache
 
 
 def create_folder(name):
@@ -272,7 +272,7 @@ if __name__ == '__main__':
     # Rename similar files to to be <name>.jpg, <name>_v1.jpg, <name>_v2.jpg etc
     for similar in amalgams.values():
         # sort to prefer the largest (pixel area) image first
-        similar.sort(key = sort_files(fileinfos), reverse = True)
+        similar.sort(key = sort_files_key(fileinfos), reverse = True)
         original_filename_without_extension = os.path.splitext(similar[0])[0]
 
         if move_suspected_duplicates:
