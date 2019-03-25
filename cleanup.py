@@ -300,7 +300,7 @@ if __name__ == '__main__':
                         del fileinfos[fileinfo_index_to_update]
                     else:
                         print 'Renaming %s to %s due to similarities.' % (oldname, newname)
-                        files[fileinfo_index_to_update].filepath = newname
+                        fileinfos[fileinfo_index_to_update].filepath = newname
                 except OSError, e:
                     print 'Failed to rename %s: %s' % (oldname, e)
                     continue
