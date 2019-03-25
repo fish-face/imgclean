@@ -15,6 +15,7 @@ HASH_DIM = (8, 8)
 HASH_SIZE = HASH_DIM[0] * HASH_DIM[1]
 CACHE_FILE = 'fingerprint.db'
 JUNK = 'Junk'
+DUPE_FOLDER_PREFIX = '[Dupes]'
 SIMILARITY_THRESH = 8
 SUPPORTED_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
 
@@ -190,7 +191,7 @@ if __name__ == '__main__':
     duplicate_folder_relative_path = ''
     if move_suspected_duplicates:
         directory_name = os.path.basename(folder)
-        duplicate_folder_relative_path = os.path.join('../', '[Dupes] ' + directory_name)
+        duplicate_folder_relative_path = os.path.join('..', DUPE_FOLDER_PREFIX + directory_name)
         create_folder(duplicate_folder_relative_path)
         
     try:
