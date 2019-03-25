@@ -49,7 +49,6 @@ def too_small(filename):
         # Probably not an image
         return False
     w, h = img.size
-    print filename, w, h
     if w < MIN_W or h < MIN_H:
         return True
 
