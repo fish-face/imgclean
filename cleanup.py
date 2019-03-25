@@ -209,13 +209,13 @@ if __name__ == '__main__':
         _print_counter += 1
         sys.stdout.write(char)
         if _print_counter > 80:
-            sys.stdout.write("\r\n")
+            sys.stdout.write("\n")
             _print_counter = 0
 
     # Recursively compute phash for all supported images, or extract the cached one.
     fileinfos = []
     for root, dir_list, file_list in os.walk('.'):
-        print "\r\nBegin hashing directory '%s':" % root
+        print "\nBegin hashing directory '%s':" % root
         _print_counter = 0
         for file in [f for f in file_list if os.path.splitext(f)[1].lower() in SUPPORTED_FILE_EXTENSIONS]:
             file = os.path.join(root, file)
