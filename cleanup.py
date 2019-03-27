@@ -55,7 +55,16 @@ def too_small(filename):
 
 def load_image(fileinfo):
     """Load an image and resize it with OpenCV"""
-    img = cv2.imread(fileinfo.filepath, 0) # 0 = greyscale
+    cv2_load_method = 0
+    if hasattr(cv2, 'CV_LOAD_IMAGE_GRAYSCALE'):
+        cv2_load_method = cv2.CV_LOAD_IMAGE_GRAYSCALE
+    elif hasattr(cv2, 'IMREAD_GRAYSCALE'):
+        cv2_load_method = cv2.IMREAD_GRAYSCALE
+    else:
+        print 'Aborting. Your CV2 version does not appear to support loading images as greyscale.'
+        exit()
+
+    img = cv2.imread(fileinfo.filepath, cv2_load_method)
     if img is None:
         return None
 
