@@ -189,7 +189,7 @@ if __name__ == '__main__':
     
     print "Begin processing root image directory '%s'" % folder
 
-    directory_name = os.path.basename(folder)
+    directory_name = os.path.basename(os.path.normpath(folder))
 
     junk_folder_relative_path = ''
     if remove_small:
