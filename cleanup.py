@@ -111,8 +111,8 @@ def amalgamate(amalgams):
     def dfs(visited, component, current):
         try:
             for c in amalgams[current]:
-                if c not in visited:
-                    visited.add(c)
+                if c.filepath not in visited:
+                    visited.add(c.filepath)
                     component.append(c)
                     dfs(visited, component, c)
         except KeyError:
@@ -123,8 +123,8 @@ def amalgamate(amalgams):
     visited = set()
     components = {}
     for i in amalgams:
-        if i not in visited:
-            visited.add(i)
+        if i.filepath not in visited:
+            visited.add(i.filepath)
             components[i] = dfs(visited, [i], i)
 
     return components
@@ -161,13 +161,8 @@ def write_cache(fileinfos):
 
     fd.close()
 
-
-def sort_files_key(fileinfos):
-    # Look up the file in the fileinfos list and use image pixel area as the 'sort' key
-    def _get_image_area_from_cache(filepath):
-        return [f.height * f.width for f in fileinfos if f.filepath == filepath][0]
-
-    return _get_image_area_from_cache
+def sort_by_pixel_area(fileinfo):
+    return fileinfo.height * fileinfo.width
 
 
 def create_folder(name):
@@ -275,8 +270,8 @@ if __name__ == '__main__':
             if file_b.phash is None:
                 continue
             if hamming(file_a.phash, file_b.phash) < SIMILARITY_THRESH:
-                amalgams[file_a.filepath].append(file_b.filepath)
-                amalgams[file_b.filepath].append(file_a.filepath)
+                amalgams[file_a].append(file_b)
+                amalgams[file_b].append(file_a)
 
     # Group together all images which are similar
     amalgams = dict(amalgams)
@@ -285,41 +280,43 @@ if __name__ == '__main__':
     # Rename similar files to to be <name>.jpg, <name>_v1.jpg, <name>_v2.jpg etc
     for similar in amalgams.values():
         # sort to prefer the largest (pixel area) image first
-        similar.sort(key = sort_files_key(fileinfos), reverse = True)
-        original_filename_without_extension = os.path.splitext(similar[0])[0]
+        similar.sort(key = sort_by_pixel_area, reverse = True)
+        master_filepath = similar[0].filepath
+        master_filename_without_extension = os.path.splitext(master_filepath)[0]
 
         if move_suspected_duplicates:
-            print 'Moving original file %s to duplicates directory' % similar[0]
-            duplicate_file_path = os.path.join(duplicate_folder_relative_path, similar[0])
+            print 'Moving master file %s to duplicates directory' % master_filepath
+            duplicate_file_path = os.path.join(duplicate_folder_relative_path, master_filepath)
             duplicate_file_directory = os.path.dirname(duplicate_file_path)
             create_folder(duplicate_file_directory)
-            os.rename(similar[0], duplicate_file_path)
-            index_to_remove = [i for i, f in enumerate(fileinfos) if f.filepath == similar[0]][0]
+            os.rename(master_filepath, duplicate_file_path)
+            index_to_remove = [i for i, f in enumerate(fileinfos) if f.filepath == master_filepath][0]
             del fileinfos[index_to_remove]
 
-        for i, oldname in enumerate(similar[1:], 1):
-            ext = os.path.splitext(oldname)[1]
-            newname = '%s_v%d%s' % (original_filename_without_extension, i, ext)
+        for i, duplicate_fileinfo in enumerate(similar[1:], 1):
+            duplicate_filepath = duplicate_fileinfo.filepath
+            ext = os.path.splitext(duplicate_filepath)[1]
+            new_duplicate_filepath = '%s_v%d%s' % (master_filename_without_extension, i, ext)
             if move_suspected_duplicates:
-                newname = os.path.join(duplicate_folder_relative_path, newname)
+                new_duplicate_filepath = os.path.join(duplicate_folder_relative_path, new_duplicate_filepath)
 
             # Don't try to rename things to themselves
-            if oldname != newname:
+            if duplicate_filepath != new_duplicate_filepath:
                 # Don't overwrite existing files
-                if os.path.exists(newname):
-                    print 'I want to rename %s to %s but the latter already exists.' % (oldname, newname)
+                if os.path.exists(new_duplicate_filepath):
+                    print 'I want to rename %s to %s but the latter already exists.' % (duplicate_filepath, new_duplicate_filepath)
                     continue
                 try:
-                    os.rename(oldname, newname)
-                    fileinfo_index_to_update = [i for i, f in enumerate(fileinfos) if f.filepath == oldname][0]
+                    os.rename(duplicate_filepath, new_duplicate_filepath)
+                    fileinfo_index_to_update = [i for i, f in enumerate(fileinfos) if f.filepath == duplicate_filepath][0]
                     if move_suspected_duplicates:
-                        print 'Moving suspected duplicate %s to %s.' % (oldname, duplicate_folder_relative_path)
+                        print 'Moving suspected duplicate %s to %s.' % (duplicate_filepath, duplicate_folder_relative_path)
                         del fileinfos[fileinfo_index_to_update]
                     else:
-                        print 'Renaming %s to %s due to similarities.' % (oldname, newname)
-                        fileinfos[fileinfo_index_to_update].filepath = newname
+                        print 'Renaming %s to %s due to similarities.' % (duplicate_filepath, new_duplicate_filepath)
+                        fileinfos[fileinfo_index_to_update].filepath = new_duplicate_filepath
                 except OSError, e:
-                    print 'Failed to rename %s: %s' % (oldname, e)
+                    print 'Failed to rename %s: %s' % (duplicate_filepath, e)
                     continue
 
     write_cache(fileinfos)
