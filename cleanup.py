@@ -262,7 +262,7 @@ if __name__ == '__main__':
         if not recursive:
             break
 
-    print 'Finished gathering hashes for %s files in %s' % (len(fileinfos), folder)
+    print '\nFinished gathering hashes for %s files in %s\n' % (len(fileinfos), folder)
 
     # Find pairs of images whose phash is similar
     amalgams = defaultdict(list)
@@ -313,7 +313,7 @@ if __name__ == '__main__':
                     os.rename(duplicate_filepath, new_duplicate_filepath)
                     fileinfo_index_to_update = [i for i, f in enumerate(fileinfos) if f.filepath == duplicate_filepath][0]
                     if move_suspected_duplicates:
-                        print 'Moving suspected duplicate %s to %s.' % (duplicate_filepath, duplicate_folder_relative_path)
+                        print 'Moving suspected duplicate %s to duplicates directory.' % (duplicate_filepath)
                         del fileinfos[fileinfo_index_to_update]
                     else:
                         print 'Renaming %s to %s due to similarities.' % (duplicate_filepath, new_duplicate_filepath)
@@ -324,5 +324,5 @@ if __name__ == '__main__':
 
     write_cache(fileinfos)
 
-    print 'Done.'
+    print '\nCleanup complete.'
 
