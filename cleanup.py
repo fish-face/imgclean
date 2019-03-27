@@ -150,6 +150,9 @@ def read_cache():
 
 
 def write_cache(fileinfos):
+    if len(fileinfos) == 0:
+        return
+
     try:
         fd = open(CACHE_FILE, 'w')
     except:
