@@ -32,6 +32,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='Clean up image files', add_help=False, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--help', action="help")
     #parser.add_argument('-r', '--rename-similar', action='store_true', help="Group together similar-looking images for easy removal")
+    parser.add_argument('-r', '--recursive', action='store_true', help="Recurse into subfolders of the target folder")
     parser.add_argument('-s', '--remove-small', action='store_true', help="Move images smaller than a certain threshold to a separate directory")
     parser.add_argument('-d', '--move-suspected-duplicates', action='store_true', help="Move all suspected duplicates (including original) into a separate directory")
     parser.add_argument('-w', '--min-width', default=MIN_W, help="Minimum width")
@@ -259,6 +260,9 @@ if __name__ == '__main__':
 
             fileinfos.append(fileinfo)
         print "done"
+
+        if not recursive:
+            break
 
     print 'Finished gathering hashes for %s files in %s' % (len(fileinfos), folder)
 
