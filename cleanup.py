@@ -8,6 +8,7 @@ import os
 from glob import glob
 from collections import defaultdict
 import argparse
+import zlib
 
 MIN_W, MIN_H = 1200, 1200*9.0/16
 SIZE = (64, 36)  # 16:9
@@ -17,7 +18,7 @@ CACHE_FILE = 'fingerprint.db'
 JUNK_FOLDER_PREFIX = '[Junk]'
 DUPE_FOLDER_PREFIX = '[Dupes]'
 SIMILARITY_THRESH = 8
-SUPPORTED_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
+SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
 
 
 class FileInfo:
@@ -26,6 +27,7 @@ class FileInfo:
         self.phash = None
         self.width = None
         self.height = None
+        self.crc32 = None
 
 
 def get_args():
@@ -35,6 +37,9 @@ def get_args():
     parser.add_argument('-r', '--recursive', action='store_true', help="Recurse into subfolders of the target folder")
     parser.add_argument('-s', '--remove-small', action='store_true', help="Move images smaller than a certain threshold to a separate directory")
     parser.add_argument('-d', '--move-suspected-duplicates', action='store_true', help="Move all suspected duplicates (including original) into a separate directory")
+    parser.add_argument('-i', '--image-content', action='store_true', help="Scan for potential duplicate images by matching image content. This only operates with a subset of image files. This is the default option")
+    parser.add_argument('-n', '--filename-match', action='store_true', help="Scan for potential duplicates by matching filenames. This supports all filetypes")
+    parser.add_argument('-c', '--crc-match', action='store_true', help="Scan for potential duplicates by matching file CRC32. This supports all filetypes")
     parser.add_argument('-w', '--min-width', default=MIN_W, help="Minimum width")
     parser.add_argument('-h', '--min-height', default=MIN_H, help="Minimum height")
     parser.add_argument('-t', '--threshold', default=SIMILARITY_THRESH, help="Threshold below which images are too similar")
@@ -97,6 +102,19 @@ def compute_phash(fileinfo):
     fileinfo.phash = sum([2**i * int(bits[i]) for i in range(len(bits))])
 
 
+_crc_buffer_size = 65536
+def compute_crc32(fileinfo):
+    """Compute crc32 hash of a file"""
+    with open(fileinfo.filepath, 'rb') as f:
+        buf = f.read(_crc_buffer_size)
+        crc_value = 0
+        while len(buf) > 0:
+            crc_value = zlib.crc32(buf, crc_value)
+            buf = f.read(_crc_buffer_size)
+
+    fileinfo.crc32 = format(crc_value & 0xFFFFFFFF, '08x')
+
+
 def hamming(h1, h2):
     """Compute the hamming distance (as binary strings) between two integers"""
     h, d = 0, h1 ^ h2
@@ -137,15 +155,14 @@ def read_cache():
         raise ValueError('Could not open cache file')
 
     cache = {}
-    for line in fd.readlines():
-        line = line.split('\t')
+    for l in fd.readlines():
+        line = l.strip().split('\t')
         try:
-            cache[line[0]] = {'mtime': int(line[1]), 'phash': int(line[2]), 'width': int(line[3]), 'height': int(line[4])}
+            cache[line[0]] = {'mtime': int(line[1]), 'phash': int(line[2]) if line[2] else None, 'width': int(line[3]) if line[3] else None, 'height': int(line[4]) if line[4] else None, 'crc32': line[5]}
         except:
-            pass
+            print 'Failed to read cache line: ', line
 
     fd.close()
-
     return cache
 
 
@@ -160,7 +177,7 @@ def write_cache(fileinfos):
 
     for fileinfo in fileinfos:
         mtime = int(os.path.getmtime(fileinfo.filepath))
-        fd.write('%s\t%s\t%s\t%s\t%s\n' % (fileinfo.filepath, mtime, fileinfo.phash, fileinfo.width, fileinfo.height))
+        fd.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (fileinfo.filepath, mtime, fileinfo.phash or '', fileinfo.width or '', fileinfo.height or '', fileinfo.crc32))
 
     fd.close()
 
@@ -219,42 +236,63 @@ if __name__ == '__main__':
             sys.stdout.write("\n")
             _print_counter = 0
 
-    # Recursively compute phash for all supported images, or extract the cached one.
+    chosen_duplicate_search_method = ''
+    if filename_match:
+        chosen_duplicate_search_method = 'filename match'
+    elif crc_match:
+        chosen_duplicate_search_method = 'CRC32'
+    else:
+        chosen_duplicate_search_method = 'image content'
+        image_content = True #Searching for duplicates by image content is the default option
+
+    # Scan files in target folder, gathering metadata to prepare to identify duplicates
     fileinfos = []
+    keyed_file_list = defaultdict(list)
     for root, dir_list, file_list in os.walk('.'):
-        print "\nBegin hashing directory '%s':" % root
+        print "\nBegin scanning directory '%s':" % root
         _print_counter = 0
-        for file in [f for f in file_list if os.path.splitext(f)[1].lower() in SUPPORTED_FILE_EXTENSIONS]:
-            file = os.path.join(root, file)
-            fileinfo = FileInfo(file)
+
+        for filename in file_list:
+            if filename == CACHE_FILE:
+                continue
+            if image_content and os.path.splitext(filename)[1].lower() not in SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS:
+                continue
+
+            filepath = os.path.join(root, filename)
+            fileinfo = FileInfo(filepath)
 
             # Move the file away if it's too small
-            if remove_small and too_small(file):
+            if remove_small and too_small(filepath):
                 try:
-                    junk_file_path = os.path.join(junk_folder_relative_path, file)
+                    junk_file_path = os.path.join(junk_folder_relative_path, filepath)
                     junk_file_directory = os.path.dirname(junk_file_path)
                     create_folder(junk_file_directory)
-                    os.rename(file, junk_file_path)
-                    print 'Moving %s to junk as it is too small.' % (file)
+                    os.rename(filepath, junk_file_path)
+                    print 'Moving %s to junk as it is too small.' % (filepath)
                 except OSError, e:
-                    print 'Failed to move %s: %s' % (file, e)
+                    print 'Failed to move %s: %s' % (filepath, e)
                 continue
 
             try:
                 # Get cached info
-                if cache[file]['mtime'] == int(os.path.getmtime(file)):
-                    for var in ('phash', 'width', 'height'):
-                        setattr(fileinfo, var, cache[file][var])
+                if cache[filepath]['mtime'] == int(os.path.getmtime(filepath)):
+                    for var in ('phash', 'width', 'height', 'crc32'):
+                        setattr(fileinfo, var, cache[filepath][var])
                 else:
                     # update hash if file has been modified since cached result
                     compute_phash(fileinfo)
-                    if fileinfo.phash:
-                        _print_progress('+') # + represents updating known hash
+                    compute_crc32(fileinfo)
+                    _print_progress('+') # + represents updating known item in cache
             except KeyError:
                 # Compute hashes of uncached files
                 compute_phash(fileinfo)
-                if fileinfo.phash:
-                    _print_progress('.') # . represents calculating new hash
+                compute_crc32(fileinfo)
+                _print_progress('.') # . represents adding new item to cache
+
+            if filename_match:
+                keyed_file_list[filename].append(fileinfo)
+            elif crc_match:
+                keyed_file_list[fileinfo.crc32].append(fileinfo)
 
             fileinfos.append(fileinfo)
         print "done"
@@ -262,28 +300,34 @@ if __name__ == '__main__':
         if not recursive:
             break
 
-    print '\nFinished gathering hashes for %s files in %s\n' % (len(fileinfos), folder)
+    print '\nFinished scanning %s files in %s' % (len(fileinfos), folder)
+    print '\nBegin identifying duplicate files using the %s method\n' % (chosen_duplicate_search_method)
 
-    # Find pairs of images whose phash is similar
-    amalgams = defaultdict(list)
-    for i, file_a in enumerate(fileinfos):
-        if file_a.phash is None:
-            continue
-        for file_b in fileinfos[i+1:]:
-            if file_b.phash is None:
+    if filename_match or crc_match:
+        # filter out items which have no potential duplicates
+        keyed_file_list = {k:v for k, v in keyed_file_list.iteritems() if len(v) > 1}
+    else:
+        # Find pairs of images whose phash is similar
+        keyed_file_list = defaultdict(list) #throw away the simple key stuff we did earlier
+        for i, file_a in enumerate(fileinfos):
+            if file_a.phash is None:
                 continue
-            if hamming(file_a.phash, file_b.phash) < SIMILARITY_THRESH:
-                amalgams[file_a].append(file_b)
-                amalgams[file_b].append(file_a)
+            for file_b in fileinfos[i+1:]:
+                if file_b.phash is None:
+                    continue
+                if hamming(file_a.phash, file_b.phash) < SIMILARITY_THRESH:
+                    keyed_file_list[file_a].append(file_b)
+                    keyed_file_list[file_b].append(file_a)
 
-    # Group together all images which are similar
-    amalgams = dict(amalgams)
-    amalgams = amalgamate(amalgams)
+        # Group together all images which are similar
+        keyed_file_list = dict(keyed_file_list)
+        keyed_file_list = amalgamate(keyed_file_list)
 
     # Rename similar files to to be <name>.jpg, <name>_v1.jpg, <name>_v2.jpg etc
-    for similar in amalgams.values():
-        # sort to prefer the largest (pixel area) image first
-        similar.sort(key = sort_by_pixel_area, reverse = True)
+    for similar in keyed_file_list.values():
+        if image_content:
+            # sort to prefer the largest (pixel area) image first
+            similar.sort(key = sort_by_pixel_area, reverse = True)
         master_filepath = similar[0].filepath
         master_filename_without_extension = os.path.splitext(master_filepath)[0]
 
