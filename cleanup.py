@@ -15,8 +15,8 @@ SIZE = (64, 36)  # 16:9
 HASH_DIM = (8, 8)
 HASH_SIZE = HASH_DIM[0] * HASH_DIM[1]
 CACHE_FILE = 'fingerprint.db'
-JUNK_FOLDER_PREFIX = '[Junk]'
-DUPE_FOLDER_PREFIX = '[Dupes]'
+JUNK_FOLDER = '[Junk]'
+DUPE_FOLDER = '[Dupes]'
 SIMILARITY_THRESH = 8
 SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
 
@@ -211,15 +211,11 @@ if __name__ == '__main__':
 
     directory_name = os.path.basename(os.path.normpath(folder))
 
-    junk_folder_relative_path = ''
     if remove_small:
-        junk_folder_relative_path = os.path.join('..', JUNK_FOLDER_PREFIX + directory_name)
-        create_folder(junk_folder_relative_path)
+        create_folder(JUNK_FOLDER)
 
-    duplicate_folder_relative_path = ''
     if move_suspected_duplicates:
-        duplicate_folder_relative_path = os.path.join('..', DUPE_FOLDER_PREFIX + directory_name)
-        create_folder(duplicate_folder_relative_path)
+        create_folder(DUPE_FOLDER)
         
     try:
         cache = read_cache()
@@ -249,6 +245,9 @@ if __name__ == '__main__':
     fileinfos = []
     keyed_file_list = defaultdict(list)
     for root, dir_list, file_list in os.walk('.'):
+        # Exclude the directories used by this script
+        dir_list[:] = [d for d in dir_list if d not in (JUNK_FOLDER, DUPE_FOLDER)]
+
         print "\nBegin scanning directory '%s':" % root
         _print_counter = 0
 
@@ -264,7 +263,7 @@ if __name__ == '__main__':
             # Move the file away if it's too small
             if remove_small and too_small(filepath):
                 try:
-                    junk_file_path = os.path.join(junk_folder_relative_path, filepath)
+                    junk_file_path = os.path.join(JUNK_FOLDER, filepath)
                     junk_file_directory = os.path.dirname(junk_file_path)
                     create_folder(junk_file_directory)
                     os.rename(filepath, junk_file_path)
@@ -333,7 +332,7 @@ if __name__ == '__main__':
 
         if move_suspected_duplicates:
             print 'Moving master file %s to duplicates directory' % master_filepath
-            duplicate_file_path = os.path.join(duplicate_folder_relative_path, master_filepath)
+            duplicate_file_path = os.path.join(DUPE_FOLDER, master_filepath)
             duplicate_file_directory = os.path.dirname(duplicate_file_path)
             create_folder(duplicate_file_directory)
             os.rename(master_filepath, duplicate_file_path)
@@ -345,7 +344,7 @@ if __name__ == '__main__':
             ext = os.path.splitext(duplicate_filepath)[1]
             new_duplicate_filepath = '%s_v%d%s' % (master_filename_without_extension, i, ext)
             if move_suspected_duplicates:
-                new_duplicate_filepath = os.path.join(duplicate_folder_relative_path, new_duplicate_filepath)
+                new_duplicate_filepath = os.path.join(DUPE_FOLDER, new_duplicate_filepath)
 
             # Don't try to rename things to themselves
             if duplicate_filepath != new_duplicate_filepath:
