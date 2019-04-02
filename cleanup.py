@@ -70,17 +70,20 @@ def load_image(fileinfo):
         print 'Aborting. Your CV2 version does not appear to support loading images as greyscale.'
         exit()
 
-    img = cv2.imread(fileinfo.filepath, cv2_load_method)
+    stream = open(fileinfo.filepath, "rb")
+    bytes = bytearray(stream.read())
+    numpyarray = np.asarray(bytes, dtype=np.uint8)
+    img = cv2.imdecode(numpyarray, cv2_load_method)
     if img is None:
+        print 'failed to read image %s' % (fileinfo.filepath.encode('utf-8'))
         return None
-
     # store original height & width; to be used later to determine "best" copy of image
     fileinfo.height, fileinfo.width = img.shape
 
     try:
         img = cv2.resize(img, SIZE)
     except cv2.error, e:
-        print 'Error loading', fileinfo.filepath
+        print 'Error loading %s' % (fileinfo.filepath.encode('utf-8'))
         raise e
     return img
 
@@ -158,9 +161,9 @@ def read_cache():
     for l in fd.readlines():
         line = l.strip().split('\t')
         try:
-            cache[line[0]] = {'mtime': int(line[1]), 'phash': int(line[2]) if line[2] else None, 'width': int(line[3]) if line[3] else None, 'height': int(line[4]) if line[4] else None, 'crc32': line[5]}
+            cache[line[0].decode('utf-8')] = {'mtime': int(line[1]), 'phash': int(line[2]) if line[2] else None, 'width': int(line[3]) if line[3] else None, 'height': int(line[4]) if line[4] else None, 'crc32': line[5]}
         except:
-            print 'Failed to read cache line: ', line
+            print 'Failed to read cache line: %s' % (line.encode('utf-8'))
 
     fd.close()
     return cache
@@ -177,7 +180,7 @@ def write_cache(fileinfos):
 
     for fileinfo in fileinfos:
         mtime = int(os.path.getmtime(fileinfo.filepath))
-        fd.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (fileinfo.filepath, mtime, fileinfo.phash or '', fileinfo.width or '', fileinfo.height or '', fileinfo.crc32))
+        fd.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (fileinfo.filepath.encode('utf-8'), mtime, fileinfo.phash or '', fileinfo.width or '', fileinfo.height or '', fileinfo.crc32))
 
     fd.close()
 
@@ -189,12 +192,12 @@ def create_folder(name):
     if not os.path.exists(name):
         try:
             os.makedirs(name)
-            print "Creating '%s' folder" % name
+            print "Creating '%s' folder" % name.encode('utf-8')
         except OSError:
-            print "Could not create '%s' folder" % name
+            print "Could not create '%s' folder" % name.encode('utf-8')
             sys.exit(1)
     elif not os.path.isdir(name):
-        print "A file named '%s' exists and it is not a directory." % name
+        print "A file named '%s' exists and it is not a directory." % name.encode('utf-8')
         sys.exit(1)
 
 if __name__ == '__main__':
@@ -203,11 +206,11 @@ if __name__ == '__main__':
     try:
         os.chdir(folder)
     except OSError:
-        print 'Invalid path: %s' % (folder)
+        print 'Invalid path: %s' % (folder.encode('utf-8'))
         sys.exit(1)
     # File operations are now relative to source directory
     
-    print "Begin processing root image directory '%s'" % folder
+    print "Begin processing root image directory '%s'" % folder.encode('utf-8')
 
     directory_name = os.path.basename(os.path.normpath(folder))
 
@@ -244,11 +247,11 @@ if __name__ == '__main__':
     # Scan files in target folder, gathering metadata to prepare to identify duplicates
     fileinfos = []
     keyed_file_list = defaultdict(list)
-    for root, dir_list, file_list in os.walk('.'):
+    for root, dir_list, file_list in os.walk(u'.'):
         # Exclude the directories used by this script
         dir_list[:] = [d for d in dir_list if d not in (JUNK_FOLDER, DUPE_FOLDER)]
 
-        print "\nBegin scanning directory '%s':" % root
+        print "\nBegin scanning directory '%s':" % root.encode('utf-8')
         _print_counter = 0
 
         for filename in file_list:
@@ -267,9 +270,9 @@ if __name__ == '__main__':
                     junk_file_directory = os.path.dirname(junk_file_path)
                     create_folder(junk_file_directory)
                     os.rename(filepath, junk_file_path)
-                    print 'Moving %s to junk as it is too small.' % (filepath)
+                    print 'Moving %s to junk as it is too small.' % (filepath.encode('utf-8'))
                 except OSError, e:
-                    print 'Failed to move %s: %s' % (filepath, e)
+                    print 'Failed to move %s: %s' % (filepath.encode('utf-8'), e)
                 continue
 
             try:
@@ -299,7 +302,7 @@ if __name__ == '__main__':
         if not recursive:
             break
 
-    print '\nFinished scanning %s files in %s' % (len(fileinfos), folder)
+    print '\nFinished scanning %s files in %s' % (len(fileinfos), folder.encode('utf-8'))
     print '\nBegin identifying duplicate files using the %s method\n' % (chosen_duplicate_search_method)
 
     if filename_match or crc_match:
@@ -331,7 +334,7 @@ if __name__ == '__main__':
         master_filename_without_extension = os.path.splitext(master_filepath)[0]
 
         if move_suspected_duplicates:
-            print 'Moving master file %s to duplicates directory' % master_filepath
+            print 'Moving master file %s to duplicates directory' % master_filepath.encode('utf-8')
             duplicate_file_path = os.path.join(DUPE_FOLDER, master_filepath)
             duplicate_file_directory = os.path.dirname(duplicate_file_path)
             create_folder(duplicate_file_directory)
@@ -350,19 +353,19 @@ if __name__ == '__main__':
             if duplicate_filepath != new_duplicate_filepath:
                 # Don't overwrite existing files
                 if os.path.exists(new_duplicate_filepath):
-                    print 'I want to rename %s to %s but the latter already exists.' % (duplicate_filepath, new_duplicate_filepath)
+                    print 'I want to rename %s to %s but the latter already exists.' % (duplicate_filepath.encode('utf-8'), new_duplicate_filepath.encode('utf-8'))
                     continue
                 try:
                     os.rename(duplicate_filepath, new_duplicate_filepath)
                     fileinfo_index_to_update = [i for i, f in enumerate(fileinfos) if f.filepath == duplicate_filepath][0]
                     if move_suspected_duplicates:
-                        print 'Moving suspected duplicate %s to duplicates directory.' % (duplicate_filepath)
+                        print 'Moving suspected duplicate %s to duplicates directory.' % (duplicate_filepath.encode('utf-8'))
                         del fileinfos[fileinfo_index_to_update]
                     else:
-                        print 'Renaming %s to %s due to similarities.' % (duplicate_filepath, new_duplicate_filepath)
+                        print 'Renaming %s to %s due to similarities.' % (duplicate_filepath.encode('utf-8'), new_duplicate_filepath.encode('utf-8'))
                         fileinfos[fileinfo_index_to_update].filepath = new_duplicate_filepath
                 except OSError, e:
-                    print 'Failed to rename %s: %s' % (duplicate_filepath, e)
+                    print 'Failed to rename %s: %s' % (duplicate_filepath.encode('utf-8'), e)
                     continue
 
     write_cache(fileinfos)
