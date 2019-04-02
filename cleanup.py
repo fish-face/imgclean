@@ -29,6 +29,9 @@ class FileInfo:
         self.height = None
         self.crc32 = None
 
+    def is_image(self):
+        return os.path.splitext(self.filepath)[1].lower() in SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='Clean up image files', add_help=False, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -95,6 +98,9 @@ def compute_dct(img):
 
 def compute_phash(fileinfo):
     """Compute a perceptual hash of an image"""
+    if not fileinfo.is_image():
+        return None
+
     img = load_image(fileinfo)
     if img is None:
         return None
@@ -257,11 +263,12 @@ if __name__ == '__main__':
         for filename in file_list:
             if filename == CACHE_FILE:
                 continue
-            if image_content and os.path.splitext(filename)[1].lower() not in SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS:
-                continue
 
             filepath = os.path.join(root, filename)
             fileinfo = FileInfo(filepath)
+
+            if image_content and not fileinfo.is_image():
+                continue
 
             # Move the file away if it's too small
             if remove_small and too_small(filepath):
