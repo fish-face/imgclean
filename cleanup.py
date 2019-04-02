@@ -305,6 +305,7 @@ if __name__ == '__main__':
 
             fileinfos.append(fileinfo)
         print "done"
+        sys.stdout.flush()
 
         if not recursive:
             break
