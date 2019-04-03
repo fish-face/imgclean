@@ -19,6 +19,7 @@ JUNK_FOLDER = '[Junk]'
 DUPE_FOLDER = '[Dupes]'
 SIMILARITY_THRESH = 8
 SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
+CRC_BUFFER_SIZE = 65536
 
 
 class FileInfo:
@@ -31,6 +32,65 @@ class FileInfo:
 
     def is_image(self):
         return os.path.splitext(self.filepath)[1].lower() in SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS
+
+    def _load_image(self):
+        """Load an image and resize it with OpenCV"""
+        cv2_load_method = 0
+        if hasattr(cv2, 'CV_LOAD_IMAGE_GRAYSCALE'):
+            cv2_load_method = cv2.CV_LOAD_IMAGE_GRAYSCALE
+        elif hasattr(cv2, 'IMREAD_GRAYSCALE'):
+            cv2_load_method = cv2.IMREAD_GRAYSCALE
+        else:
+            print 'Aborting. Your CV2 version does not appear to support loading images as greyscale.'
+            exit()
+
+        stream = open(self.filepath, "rb")
+        bytes = bytearray(stream.read())
+        numpyarray = np.asarray(bytes, dtype=np.uint8)
+        img = cv2.imdecode(numpyarray, cv2_load_method)
+        if img is None:
+            print 'failed to read image %s' % (self.filepath.encode('utf-8'))
+            return None
+        # store original height & width; to be used later to determine "best" copy of image
+        self.height, self.width = img.shape
+
+        try:
+            img = cv2.resize(img, SIZE)
+        except cv2.error, e:
+            print 'Error loading %s' % (self.filepath.encode('utf-8'))
+            raise e
+
+        return img
+
+    def compute_crc32(self):
+        """Compute crc32 hash of a file"""
+        with open(self.filepath, 'rb') as f:
+            buf = f.read(CRC_BUFFER_SIZE)
+            crc_value = 0
+            while len(buf) > 0:
+                crc_value = zlib.crc32(buf, crc_value)
+                buf = f.read(CRC_BUFFER_SIZE)
+
+        self.crc32 = format(crc_value & 0xFFFFFFFF, '08x')
+
+    def _compute_dct(self, img):
+        """Get the discrete cosine transform of an image"""
+        return np.uint8(cv2.dct(np.float32(img)/255.0)*255)
+
+    def compute_phash(self):
+        """Compute a perceptual hash of an image"""
+        if not self.is_image():
+            return None
+
+        img = self._load_image()
+        if img is None:
+            return None
+        dct = self._compute_dct(img)
+        dct = dct[:HASH_DIM[0], :HASH_DIM[1]]
+        avg = np.average(dct)
+        bits = [(x > avg) for x in dct.flatten()]
+        self.phash = sum([2**i * int(bits[i]) for i in range(len(bits))])
+
 
 
 def get_args():
@@ -60,68 +120,6 @@ def too_small(filename):
     w, h = img.size
     if w < MIN_W or h < MIN_H:
         return True
-
-
-def load_image(fileinfo):
-    """Load an image and resize it with OpenCV"""
-    cv2_load_method = 0
-    if hasattr(cv2, 'CV_LOAD_IMAGE_GRAYSCALE'):
-        cv2_load_method = cv2.CV_LOAD_IMAGE_GRAYSCALE
-    elif hasattr(cv2, 'IMREAD_GRAYSCALE'):
-        cv2_load_method = cv2.IMREAD_GRAYSCALE
-    else:
-        print 'Aborting. Your CV2 version does not appear to support loading images as greyscale.'
-        exit()
-
-    stream = open(fileinfo.filepath, "rb")
-    bytes = bytearray(stream.read())
-    numpyarray = np.asarray(bytes, dtype=np.uint8)
-    img = cv2.imdecode(numpyarray, cv2_load_method)
-    if img is None:
-        print 'failed to read image %s' % (fileinfo.filepath.encode('utf-8'))
-        return None
-    # store original height & width; to be used later to determine "best" copy of image
-    fileinfo.height, fileinfo.width = img.shape
-
-    try:
-        img = cv2.resize(img, SIZE)
-    except cv2.error, e:
-        print 'Error loading %s' % (fileinfo.filepath.encode('utf-8'))
-        raise e
-    return img
-
-
-def compute_dct(img):
-    """Get the discrete cosine transform of an image"""
-    return np.uint8(cv2.dct(np.float32(img)/255.0)*255)
-
-
-def compute_phash(fileinfo):
-    """Compute a perceptual hash of an image"""
-    if not fileinfo.is_image():
-        return None
-
-    img = load_image(fileinfo)
-    if img is None:
-        return None
-    dct = compute_dct(img)
-    dct = dct[:HASH_DIM[0], :HASH_DIM[1]]
-    avg = np.average(dct)
-    bits = [(x > avg) for x in dct.flatten()]
-    fileinfo.phash = sum([2**i * int(bits[i]) for i in range(len(bits))])
-
-
-_crc_buffer_size = 65536
-def compute_crc32(fileinfo):
-    """Compute crc32 hash of a file"""
-    with open(fileinfo.filepath, 'rb') as f:
-        buf = f.read(_crc_buffer_size)
-        crc_value = 0
-        while len(buf) > 0:
-            crc_value = zlib.crc32(buf, crc_value)
-            buf = f.read(_crc_buffer_size)
-
-    fileinfo.crc32 = format(crc_value & 0xFFFFFFFF, '08x')
 
 
 def hamming(h1, h2):
@@ -189,9 +187,6 @@ def write_cache(fileinfos):
         fd.write('%s\t%s\t%s\t%s\t%s\t%s\n' % (fileinfo.filepath.encode('utf-8'), mtime, fileinfo.phash or '', fileinfo.width or '', fileinfo.height or '', fileinfo.crc32))
 
     fd.close()
-
-def sort_by_pixel_area(fileinfo):
-    return fileinfo.height * fileinfo.width
 
 
 def create_folder(name):
@@ -289,13 +284,13 @@ if __name__ == '__main__':
                         setattr(fileinfo, var, cache[filepath][var])
                 else:
                     # update hash if file has been modified since cached result
-                    compute_phash(fileinfo)
-                    compute_crc32(fileinfo)
+                    fileinfo.compute_phash()
+                    fileinfo.compute_crc32()
                     _print_progress('+') # + represents updating known item in cache
             except KeyError:
                 # Compute hashes of uncached files
-                compute_phash(fileinfo)
-                compute_crc32(fileinfo)
+                fileinfo.compute_phash()
+                fileinfo.compute_crc32()
                 _print_progress('.') # . represents adding new item to cache
 
             if filename_match:
@@ -337,7 +332,7 @@ if __name__ == '__main__':
     for similar in keyed_file_list.values():
         if image_content:
             # sort to prefer the largest (pixel area) image first
-            similar.sort(key = sort_by_pixel_area, reverse = True)
+            similar.sort(key = lambda f: f.height * f.width, reverse = True)
         master_filepath = similar[0].filepath
         master_filename_without_extension = os.path.splitext(master_filepath)[0]
 
