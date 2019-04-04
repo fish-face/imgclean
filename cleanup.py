@@ -19,7 +19,7 @@ JUNK_FOLDER = '[Junk]'
 DUPE_FOLDER = '[Dupes]'
 SIMILARITY_THRESH = 8
 SUPPORTED_IMAGE_CONTENT_FILE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
-CRC_BUFFER_SIZE = 65536
+READ_BUFFER_SIZE = 65536
 
 
 class FileInfo:
@@ -44,8 +44,13 @@ class FileInfo:
             print 'Aborting. Your CV2 version does not appear to support loading images as greyscale.'
             exit()
 
-        stream = open(self.filepath, "rb")
-        bytes = bytearray(stream.read())
+        bytes = bytearray()
+        with open(self.filepath, "rb") as stream:
+            buf = stream.read(READ_BUFFER_SIZE)
+            while len(buf) > 0:
+                bytes += bytearray(buf)
+                buf = stream.read(READ_BUFFER_SIZE)
+
         numpyarray = np.asarray(bytes, dtype=np.uint8)
         img = cv2.imdecode(numpyarray, cv2_load_method)
         if img is None:
@@ -65,11 +70,11 @@ class FileInfo:
     def compute_crc32(self):
         """Compute crc32 hash of a file"""
         with open(self.filepath, 'rb') as f:
-            buf = f.read(CRC_BUFFER_SIZE)
+            buf = f.read(READ_BUFFER_SIZE)
             crc_value = 0
             while len(buf) > 0:
                 crc_value = zlib.crc32(buf, crc_value)
-                buf = f.read(CRC_BUFFER_SIZE)
+                buf = f.read(READ_BUFFER_SIZE)
 
         self.crc32 = format(crc_value & 0xFFFFFFFF, '08x')
 
