@@ -255,6 +255,7 @@ if __name__ == '__main__':
         sys.stdout.write(char)
         if _print_counter > 80:
             sys.stdout.write("\n")
+            sys.stdout.flush()
             _print_counter = 0
 
     chosen_duplicate_search_method = ''
@@ -328,6 +329,7 @@ if __name__ == '__main__':
 
     print '\nFinished scanning %s files in %s' % (len(fileinfos), folder.encode('utf-8'))
     print '\nBegin identifying duplicate files using the %s method\n' % (chosen_duplicate_search_method)
+    sys.stdout.flush()
 
     if filename_match or crc_match:
         # filter out items which have no potential duplicates
