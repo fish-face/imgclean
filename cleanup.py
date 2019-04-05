@@ -327,6 +327,7 @@ if __name__ == '__main__':
         if not recursive:
             break
 
+    write_cache(fileinfos) # write out the current state to cache, in case we have any issues in the next step
     print '\nFinished scanning %s files in %s' % (len(fileinfos), folder.encode('utf-8'))
     print '\nBegin identifying duplicate files using the %s method\n' % (chosen_duplicate_search_method)
     sys.stdout.flush()
