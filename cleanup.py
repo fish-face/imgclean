@@ -271,8 +271,8 @@ if __name__ == '__main__':
     fileinfos = []
     keyed_file_list = defaultdict(list)
     for root, dir_list, file_list in os.walk(u'.'):
-        # Exclude the directories used by this script
-        dir_list[:] = [d for d in dir_list if d not in (JUNK_FOLDER, DUPE_FOLDER)]
+        # Exclude OS trash folders & the directories used by this script
+        dir_list[:] = [d for d in dir_list if d not in (JUNK_FOLDER, DUPE_FOLDER, '$RECYCLE.BIN', '.Trash')]
 
         print "\nBegin scanning directory '%s':" % root.encode('utf-8')
         _print_counter = 0
