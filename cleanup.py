@@ -207,18 +207,19 @@ def create_folder(name):
         sys.exit(1)
 
 
-def safely_move_file(fileinfo, target_filepath):
+def safely_move_file(source_filepath, target_filepath):
     target_file_directory = os.path.dirname(target_filepath)
     create_folder(target_file_directory)
-    source_filepath, source_file_extension = os.path.splitext(fileinfo.filepath)
+    source_filepath_without_extension, source_file_extension = os.path.splitext(source_filepath)
 
     rename_counter = 0
     while os.path.exists(target_filepath):
-        print 'Asked to rename %s to %s but the latter already exists. Appending -%d' % (fileinfo.filepath.encode('utf-8'), target_filepath.encode('utf-8'), rename_counter)
-        new_filename = '%s-%d%s' % (source_filepath, rename_counter, source_file_extension)
+        print 'Asked to rename %s to %s but the latter already exists. Appending -%d' % (source_filepath.encode('utf-8'), target_filepath.encode('utf-8'), rename_counter)
+        new_filename = '%s-%d%s' % (source_filepath_without_extension, rename_counter, source_file_extension)
         target_filepath = os.path.join(target_file_directory, new_filename)
         rename_counter += 1
-    os.rename(fileinfo.filepath, target_filepath)
+
+    os.rename(source_filepath, target_filepath)
     return target_filepath
 
 
@@ -363,7 +364,7 @@ if __name__ == '__main__':
             duplicate_master_filepath = os.path.join(DUPE_FOLDER, master_filepath)
             print 'Moving master file %s to %s' % (master_filepath.encode('utf-8'), duplicate_master_filepath.encode('utf-8'))
 
-            new_duplicate_master_filepath = safely_move_file(similar[0], duplicate_master_filepath)
+            new_duplicate_master_filepath = safely_move_file(similar[0].filepath, duplicate_master_filepath)
             master_filepath_without_extension = os.path.splitext(new_duplicate_master_filepath)[0]
 
             index_to_remove = [i for i, f in enumerate(fileinfos) if f.filepath == master_filepath][0]
@@ -378,12 +379,13 @@ if __name__ == '__main__':
             fileinfo_index_to_update = [i for i, f in enumerate(fileinfos) if f.filepath == duplicate_filepath][0]
             if move_suspected_duplicates:
                 print 'Moving suspected duplicate %s to %s.' % (duplicate_filepath.encode('utf-8'), new_duplicate_filepath.encode('utf-8'))
+                safely_move_file(duplicate_filepath, new_duplicate_filepath)
                 del fileinfos[fileinfo_index_to_update]
             else:
                 print 'Renaming %s to %s due to similarities.' % (duplicate_filepath.encode('utf-8'), new_duplicate_filepath.encode('utf-8'))
+                new_duplicate_filepath = safely_move_file(duplicate_filepath, new_duplicate_filepath)
                 fileinfos[fileinfo_index_to_update].filepath = new_duplicate_filepath
 
-            safely_move_file(duplicate_fileinfo, new_duplicate_filepath)
 
     write_cache(fileinfos)
 
