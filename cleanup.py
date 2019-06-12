@@ -23,8 +23,9 @@ READ_BUFFER_SIZE = 65536
 
 
 class FileInfo:
-    def __init__(self, filepath):
+    def __init__(self, filepath, filename):
         self.filepath = filepath
+        self.filename = filename
         self.phash = None
         self.width = None
         self.height = None
@@ -283,7 +284,7 @@ if __name__ == '__main__':
                 continue
 
             filepath = os.path.join(root, filename)
-            fileinfo = FileInfo(filepath)
+            fileinfo = FileInfo(filepath, filename)
 
             if image_content and not fileinfo.is_image():
                 continue
@@ -356,7 +357,8 @@ if __name__ == '__main__':
     for similar in keyed_file_list.values():
         if image_content:
             # sort to prefer the largest (pixel area) image first
-            similar.sort(key = lambda f: f.height * f.width, reverse = True)
+            similar.sort(key = lambda f: len(f.filename)) # secondary sort on length of filename (prefer short filenames)
+            similar.sort(key = lambda f: f.height * f.width, reverse = True) # primary sort on size of image (prefer larger images)
         master_filepath = similar[0].filepath
         master_filepath_without_extension = os.path.splitext(master_filepath)[0]
 
